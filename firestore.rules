@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // /agents — readable by any authenticated user, writable only by the owner
+    match /agents/{agentId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.auth.uid == agentId;
+      allow update, delete: if request.auth != null && request.auth.uid == agentId;
+    }
+
+    // /listings — public read for active listings; owner-only write
+    match /listings/{listingId} {
+      allow read: if resource.data.status == "active"
+        || (request.auth != null && request.auth.uid == resource.data.agentId);
+
+      allow create: if request.auth != null
+        && request.resource.data.agentId == request.auth.uid
+        && request.resource.data.status in ["active", "pending"]
+        && request.resource.data.title is string
+        && request.resource.data.price is number;
+
+      allow update, delete: if request.auth != null
+        && resource.data.agentId == request.auth.uid;
+    }
+  }
+}
