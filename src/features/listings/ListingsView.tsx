@@ -137,7 +137,7 @@ export function ListingsView({ scope }: Props) {
               listing={l}
               agent={agents[l.agentId]}
               ownedByMe={!!currentAgent && l.agentId === currentAgent.id}
-              onClick={() => nav(`/listings/${l.id}`)}
+              onClick={() => nav(`/agent/listings/${l.id}`)}
             />
           ))}
         </div>

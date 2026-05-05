@@ -36,7 +36,7 @@ export function SignupScreen() {
     setLoading(true);
     try {
       await signUp(form.email.trim(), form.password, form.name.trim());
-      nav("/", { replace: true });
+      nav("/agent", { replace: true });
     } catch (err) {
       setError(friendly(err));
       setLoading(false);

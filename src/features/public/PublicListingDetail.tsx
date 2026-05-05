@@ -1,28 +1,24 @@
-// Full property page with photo carousel, details, agent card, and edit/delete actions for the owner.
+// Customer-facing listing page — same layout as the agent detail, minus edit/delete and with a "Contact agent" CTA.
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
-  Edit3,
   Image as ImageIcon,
   Loader,
+  Mail,
   MapPin,
-  Trash2,
+  Phone,
 } from "lucide-react";
-import { Btn } from "../../components/Btn";
 import { Tag } from "../../components/Tag";
-import { useAuth } from "../auth/AuthContext";
-import { deleteListing, getListing } from "../../lib/listings";
 import { doc, onSnapshot } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import { palette } from "../../lib/palette";
 import { fmtDate, fmtMoney } from "../../lib/utils";
 import type { Agent, Listing } from "../../lib/schema";
 
-export function ListingDetail() {
+export function PublicListingDetail() {
   const { id } = useParams();
   const nav = useNavigate();
-  const { currentAgent } = useAuth();
   const [listing, setListing] = useState<Listing | null>(null);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [photoIdx, setPhotoIdx] = useState(0);
@@ -36,31 +32,36 @@ export function ListingDetail() {
       doc(db, "listings", id),
       (snap) => {
         if (!snap.exists()) {
-          setError("Listing not found.");
+          setError("This listing is no longer available.");
           setListing(null);
         } else {
           const data = snap.data();
-          setListing({
-            id: snap.id,
-            agentId: String(data.agentId ?? ""),
-            title: String(data.title ?? ""),
-            type: data.type === "rent" ? "rent" : "sale",
-            price: Number(data.price ?? 0),
-            currency: "USD",
-            location: String(data.location ?? ""),
-            district: data.district ? String(data.district) : undefined,
-            city: data.city ? String(data.city) : undefined,
-            beds: Number(data.beds ?? 0),
-            baths: Number(data.baths ?? 0),
-            sqm: Number(data.sqm ?? 0),
-            photos: Array.isArray(data.photos) ? (data.photos as string[]) : [],
-            description: String(data.description ?? ""),
-            status:
-              (data.status as Listing["status"] | undefined) ?? "active",
-            createdAt: data.createdAt as Listing["createdAt"],
-            updatedAt: data.updatedAt as Listing["updatedAt"],
-          });
-          setError("");
+          if (data.status !== "active") {
+            setError("This listing is no longer available.");
+            setListing(null);
+          } else {
+            setListing({
+              id: snap.id,
+              agentId: String(data.agentId ?? ""),
+              title: String(data.title ?? ""),
+              type: data.type === "rent" ? "rent" : "sale",
+              price: Number(data.price ?? 0),
+              currency: "USD",
+              location: String(data.location ?? ""),
+              district: data.district ? String(data.district) : undefined,
+              city: data.city ? String(data.city) : undefined,
+              beds: Number(data.beds ?? 0),
+              baths: Number(data.baths ?? 0),
+              sqm: Number(data.sqm ?? 0),
+              photos: Array.isArray(data.photos) ? (data.photos as string[]) : [],
+              description: String(data.description ?? ""),
+              status:
+                (data.status as Listing["status"] | undefined) ?? "active",
+              createdAt: data.createdAt as Listing["createdAt"],
+              updatedAt: data.updatedAt as Listing["updatedAt"],
+            });
+            setError("");
+          }
         }
         setLoading(false);
       },
@@ -72,7 +73,6 @@ export function ListingDetail() {
     return () => unsub();
   }, [id]);
 
-  // Pull listing agent profile for the agent card.
   useEffect(() => {
     if (!listing?.agentId) return;
     const unsub = onSnapshot(doc(db, "agents", listing.agentId), (snap) => {
@@ -87,40 +87,12 @@ export function ListingDetail() {
         email: String(data.email ?? ""),
         bio: String(data.bio ?? ""),
         avatar: String(data.avatar ?? ""),
+        phone: data.phone ? String(data.phone) : undefined,
         joinedAt: (data.joinedAt as Agent["joinedAt"]) ?? 0,
       });
     });
     return () => unsub();
   }, [listing?.agentId]);
-
-  async function handleDelete() {
-    if (!listing) return;
-    const ok = confirm(
-      `Delete "${listing.title}"? This cannot be undone.`
-    );
-    if (!ok) return;
-    try {
-      // Fallback to id from id param when listing.id isn't set yet.
-      await deleteListing(listing.id || id || "");
-      nav("/agent/listings/mine");
-    } catch (err) {
-      console.error(err);
-      alert("Could not delete the listing. Please try again.");
-    }
-  }
-
-  // Fallback to a one-shot fetch if the snapshot listener errored but we still have an id.
-  useEffect(() => {
-    if (!error || !id) return;
-    getListing(id)
-      .then((l) => {
-        if (l) {
-          setListing(l);
-          setError("");
-        }
-      })
-      .catch(() => {});
-  }, [error, id]);
 
   if (loading) {
     return (
@@ -141,17 +113,16 @@ export function ListingDetail() {
           {error || "Listing unavailable."}
         </p>
         <button
-          onClick={() => nav(-1)}
+          onClick={() => nav("/")}
           className="mt-4 underline text-sm"
           style={{ color: palette.terracotta }}
         >
-          Go back
+          Browse other properties
         </button>
       </div>
     );
   }
 
-  const owned = !!currentAgent && listing.agentId === currentAgent.id;
   const photos = listing.photos.length ? listing.photos : [];
 
   return (
@@ -161,7 +132,7 @@ export function ListingDetail() {
         className="font-body text-sm flex items-center gap-1.5 mb-6 hover:underline"
         style={{ color: palette.inkSoft }}
       >
-        <ArrowLeft size={14} /> Back to listings
+        <ArrowLeft size={14} /> Back to all properties
       </button>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
@@ -254,7 +225,7 @@ export function ListingDetail() {
                 className="text-xs uppercase tracking-wider mb-2"
                 style={{ color: palette.inkSoft }}
               >
-                Description
+                About this property
               </div>
               <p
                 className="font-body text-[15px] leading-relaxed whitespace-pre-line"
@@ -267,47 +238,75 @@ export function ListingDetail() {
 
           {agent ? (
             <div
-              className="p-4 rounded-md flex items-center gap-3 mb-6"
+              className="p-5 rounded-lg"
               style={{
                 backgroundColor: palette.cream,
                 border: `1px solid ${palette.border}`,
               }}
             >
-              <div
-                className="w-11 h-11 rounded-full flex items-center justify-center font-display text-sm"
-                style={{
-                  backgroundColor: palette.ink,
-                  color: palette.cream,
-                  fontWeight: 500,
-                }}
-              >
-                {agent.avatar}
-              </div>
-              <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3 mb-3">
                 <div
-                  className="text-xs uppercase tracking-wider"
+                  className="w-12 h-12 rounded-full flex items-center justify-center font-display text-base"
+                  style={{
+                    backgroundColor: palette.ink,
+                    color: palette.cream,
+                    fontWeight: 500,
+                  }}
+                >
+                  {agent.avatar}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div
+                    className="text-xs uppercase tracking-wider"
+                    style={{ color: palette.inkSoft }}
+                  >
+                    Listing agent
+                  </div>
+                  <div
+                    className="font-body text-sm font-medium truncate"
+                    style={{ color: palette.ink }}
+                  >
+                    {agent.name}
+                  </div>
+                </div>
+              </div>
+              {agent.bio ? (
+                <p
+                  className="font-body text-xs leading-relaxed mb-3"
                   style={{ color: palette.inkSoft }}
                 >
-                  Listing agent
-                </div>
-                <div
-                  className="font-body text-sm font-medium truncate"
-                  style={{ color: palette.ink }}
-                >
-                  {agent.name}
-                </div>
+                  {agent.bio}
+                </p>
+              ) : null}
+              <div className="flex flex-col gap-2">
+                {agent.phone ? (
+                  <a
+                    href={`tel:${agent.phone}`}
+                    className="font-body text-sm flex items-center gap-2 px-3 py-2 rounded-md"
+                    style={{
+                      backgroundColor: palette.terracotta,
+                      color: "#FFF",
+                    }}
+                  >
+                    <Phone size={14} /> Call {agent.phone}
+                  </a>
+                ) : null}
+                {agent.email ? (
+                  <a
+                    href={`mailto:${agent.email}?subject=${encodeURIComponent(
+                      "About: " + listing.title
+                    )}`}
+                    className="font-body text-sm flex items-center gap-2 px-3 py-2 rounded-md"
+                    style={{
+                      backgroundColor: palette.paper,
+                      color: palette.ink,
+                      border: `1px solid ${palette.borderStrong}`,
+                    }}
+                  >
+                    <Mail size={14} /> Email {agent.name.split(" ")[0]}
+                  </a>
+                ) : null}
               </div>
-            </div>
-          ) : null}
-
-          {owned ? (
-            <div className="flex gap-2">
-              <Btn icon={Edit3} onClick={() => nav(`/agent/listings/${listing.id}/edit`)}>
-                Edit listing
-              </Btn>
-              <Btn variant="danger" icon={Trash2} onClick={handleDelete}>
-                Delete
-              </Btn>
             </div>
           ) : null}
         </div>

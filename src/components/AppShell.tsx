@@ -1,7 +1,7 @@
 // Sticky header + nav + footer wrapper used by every authenticated page.
 import { useState } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { Home, LogOut, Plus } from "lucide-react";
+import { Eye, Home, LogOut, Plus } from "lucide-react";
 import { useAuth } from "../features/auth/AuthContext";
 import { palette } from "../lib/palette";
 import type { ReactNode } from "react";
@@ -13,11 +13,11 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { to: "/", label: "Dashboard", exact: true },
-  { to: "/listings/mine", label: "My listings" },
-  { to: "/listings", label: "All listings", exact: true },
-  { to: "/database", label: "Database" },
-  { to: "/profile", label: "Profile" },
+  { to: "/agent", label: "Dashboard", exact: true },
+  { to: "/agent/listings/mine", label: "My listings" },
+  { to: "/agent/listings", label: "All listings", exact: true },
+  { to: "/agent/database", label: "Database" },
+  { to: "/agent/profile", label: "Profile" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -45,7 +45,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         }}
       >
         <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-          <Link to="/" className="flex items-center gap-2.5">
+          <Link to="/agent" className="flex items-center gap-2.5">
             <div
               className="w-8 h-8 rounded-sm flex items-center justify-center"
               style={{ backgroundColor: palette.terracotta }}
@@ -83,7 +83,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => nav("/listings/new")}
+              onClick={() => nav("/agent/listings/new")}
               className="hidden sm:flex font-body text-sm px-3 py-2 rounded-md items-center gap-1.5 transition-colors"
               style={{
                 backgroundColor: palette.terracotta,
@@ -94,6 +94,16 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               <Plus size={14} /> New
             </button>
+            <Link
+              to="/"
+              target="_blank"
+              rel="noreferrer"
+              className="hidden md:flex font-body text-xs items-center gap-1.5 px-2 py-2 rounded-md"
+              style={{ color: palette.inkSoft }}
+              title="Open the public site customers see"
+            >
+              <Eye size={13} /> Public site
+            </Link>
             <div className="relative">
               <button
                 onClick={() => setMenuOpen(!menuOpen)}

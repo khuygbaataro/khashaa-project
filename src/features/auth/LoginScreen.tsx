@@ -32,7 +32,7 @@ export function LoginScreen() {
     setLoading(true);
     try {
       await signIn(form.email.trim(), form.password);
-      nav("/", { replace: true });
+      nav("/agent", { replace: true });
     } catch (err) {
       setError(friendly(err));
       setLoading(false);

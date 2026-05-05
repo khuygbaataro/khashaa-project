@@ -75,6 +75,8 @@ export async function updateAgent(
 }
 
 // Streams the merged (User + agent doc) record. callback receives null when signed out.
+// Robust against Firestore failures (e.g. rules not yet deployed) — falls back to a
+// minimal in-memory Agent so the UI can still render and the user can sign out.
 export function onAuthChange(
   callback: (agent: Agent | null) => void
 ): () => void {
@@ -83,26 +85,42 @@ export function onAuthChange(
       callback(null);
       return;
     }
-    let agent = await fetchAgent(user.uid);
-    if (!agent) {
-      // Edge case: auth user exists but doc was never created. Backfill.
-      const fallback = {
-        name: user.displayName ?? user.email ?? "Agent",
-        email: user.email ?? "",
-        bio: "",
-        avatar: initialsOf(user.displayName ?? user.email ?? "??"),
-        joinedAt: serverTimestamp(),
-      };
-      await setDoc(doc(db, AGENTS, user.uid), fallback);
-      agent = {
-        id: user.uid,
-        name: fallback.name,
-        email: fallback.email,
-        bio: "",
-        avatar: fallback.avatar,
-        joinedAt: Date.now(),
-      };
+    const minimal: Agent = {
+      id: user.uid,
+      name: user.displayName ?? user.email ?? "Agent",
+      email: user.email ?? "",
+      bio: "",
+      avatar: initialsOf(user.displayName ?? user.email ?? "??"),
+      joinedAt: Date.now(),
+    };
+    try {
+      let agent = await fetchAgent(user.uid);
+      if (!agent) {
+        // Edge case: auth user exists but doc was never created. Backfill.
+        const fallback = {
+          name: minimal.name,
+          email: minimal.email,
+          bio: "",
+          avatar: minimal.avatar,
+          joinedAt: serverTimestamp(),
+        };
+        try {
+          await setDoc(doc(db, AGENTS, user.uid), fallback);
+        } catch (err) {
+          console.warn(
+            "[auth] could not create /agents doc — Firestore rules may not be deployed yet",
+            err
+          );
+        }
+        agent = minimal;
+      }
+      callback(agent);
+    } catch (err) {
+      console.warn(
+        "[auth] could not load /agents doc — Firestore rules may not be deployed yet",
+        err
+      );
+      callback(minimal);
     }
-    callback(agent);
   });
 }

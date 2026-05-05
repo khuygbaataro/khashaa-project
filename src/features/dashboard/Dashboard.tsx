@@ -54,7 +54,7 @@ export function Dashboard() {
             {firstName}'s dashboard
           </h1>
         </div>
-        <Btn icon={Plus} onClick={() => nav("/listings/new")}>
+        <Btn icon={Plus} onClick={() => nav("/agent/listings/new")}>
           New listing
         </Btn>
       </div>
@@ -93,7 +93,7 @@ export function Dashboard() {
           Recent activity
         </h2>
         <button
-          onClick={() => nav("/listings/mine")}
+          onClick={() => nav("/agent/listings/mine")}
           className="font-body text-sm hover:underline"
           style={{ color: palette.terracotta }}
         >
@@ -123,7 +123,7 @@ export function Dashboard() {
           <div className="text-sm mb-5" style={{ color: palette.inkSoft }}>
             Add your first property to get started
           </div>
-          <Btn icon={Plus} onClick={() => nav("/listings/new")}>
+          <Btn icon={Plus} onClick={() => nav("/agent/listings/new")}>
             Add listing
           </Btn>
         </div>
@@ -134,7 +134,7 @@ export function Dashboard() {
               key={l.id}
               listing={l}
               ownedByMe
-              onClick={() => nav(`/listings/${l.id}`)}
+              onClick={() => nav(`/agent/listings/${l.id}`)}
             />
           ))}
         </div>
@@ -164,7 +164,7 @@ export function Dashboard() {
             </div>
           </div>
           <button
-            onClick={() => nav("/database")}
+            onClick={() => nav("/agent/database")}
             className="font-body text-sm px-4 py-2.5 rounded-md flex items-center gap-2 transition-colors"
             style={{
               backgroundColor: palette.terracotta,

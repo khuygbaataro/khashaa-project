@@ -119,10 +119,10 @@ export function ListingForm() {
       };
       if (id) {
         await updateListing(id, data);
-        nav(`/listings/${id}`);
+        nav(`/agent/listings/${id}`);
       } else {
         const newId = await createListing(currentAgent.id, data);
-        nav(`/listings/${newId}`);
+        nav(`/agent/listings/${newId}`);
       }
     } catch (err) {
       console.error(err);
