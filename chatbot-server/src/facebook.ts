@@ -83,20 +83,21 @@ export async function sendPropertyCarousel(
   publicSiteUrl: string
 ): Promise<void> {
   if (!listings.length) return;
+  const baseUrl = publicSiteUrl.replace(/\/$/, "");
   const elements = listings.slice(0, 10).map((l) => {
-    const cover = firstHttpPhoto(l.photos);
+    const cover = firstUsablePhoto(l.photos, baseUrl);
     return {
       title: truncate(l.title, 80),
       subtitle: truncate(
-        `${formatPrice(l.price, l.type)} · ${l.beds} bed · ${l.baths} bath · ${l.sqm}m² · ${l.location}`,
+        `${formatPriceMnt(l.price, l.type)} · ${l.beds} өрөө · ${l.sqm}м² · ${l.location}`,
         80
       ),
       image_url: cover,
       buttons: [
         {
           type: "web_url",
-          url: `${publicSiteUrl.replace(/\/$/, "")}/property/${l.id}`,
-          title: "View details",
+          url: `${baseUrl}/property/${l.id}`,
+          title: "Дэлгэрэнгүй",
         },
       ],
     };
@@ -133,12 +134,31 @@ function truncate(s: string, max: number): string {
   return s.length <= max ? s : s.slice(0, max - 1) + "…";
 }
 
-function firstHttpPhoto(urls: string[]): string | undefined {
-  // Facebook needs a publicly-reachable https URL. Local /foo.jpg paths don't work.
-  return urls.find((u) => /^https?:\/\//i.test(u));
+function firstUsablePhoto(urls: string[], baseUrl: string): string | undefined {
+  // Facebook needs a publicly-reachable https URL. Three cases:
+  //   https://...  → use as-is
+  //   /foo.jpg     → prefix with the public site URL (e.g. https://un-property.web.app/foo.jpg)
+  //   anything else → skip
+  for (const u of urls) {
+    if (/^https?:\/\//i.test(u)) return u;
+    if (u.startsWith("/")) return `${baseUrl}${u}`;
+  }
+  return undefined;
 }
 
-function formatPrice(price: number, type: "sale" | "rent"): string {
-  const usd = "$" + price.toLocaleString("en-US");
-  return type === "rent" ? `${usd}/mo` : usd;
+const USD_TO_MNT = 3400;
+
+function formatPriceMnt(usdPrice: number, type: "sale" | "rent"): string {
+  const mnt = usdPrice * USD_TO_MNT;
+  let label: string;
+  if (mnt >= 1_000_000_000) {
+    label = (mnt / 1_000_000_000).toFixed(1).replace(/\.0$/, "") + " тэрбум ₮";
+  } else if (mnt >= 1_000_000) {
+    label = Math.round(mnt / 1_000_000) + " сая ₮";
+  } else if (mnt >= 1_000) {
+    label = Math.round(mnt / 1_000) + " мянга ₮";
+  } else {
+    label = mnt.toLocaleString("en-US") + " ₮";
+  }
+  return type === "rent" ? `${label}/сар` : label;
 }
