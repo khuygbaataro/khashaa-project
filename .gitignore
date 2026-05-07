@@ -19,3 +19,14 @@ dist-ssr
 .firebase/
 firebase-debug.log
 firestore-debug.log
+
+# Service-account JSONs and any other accidental credential dumps
+service-account*.json
+*-firebase-adminsdk-*.json
+*credentials*.json
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Claude Code local settings
+.claude/

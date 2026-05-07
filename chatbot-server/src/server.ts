@@ -1,6 +1,7 @@
 // Express server. GET /webhook = FB verify handshake. POST /webhook = receive messages.
 // Handlers are fired in the background (no awaiting in the response path) so FB gets a 200
 // fast — they retry aggressively if the response is slow.
+import "dotenv/config";
 import express, { type Request, type Response } from "express";
 import { runTurn } from "./claude.js";
 import { getHistory, setHistory } from "./conversation.js";

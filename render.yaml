@@ -1,0 +1,36 @@
+# Render blueprint for the Khashaa Messenger chatbot.
+# Render auto-detects this file when you connect the GitHub repo.
+# Free tier: 750 hours/month, free HTTPS, custom subdomain. Spins down after
+# ~15 min idle (first request after sleep takes ~30s to wake up).
+#
+# Real secrets are NOT in this file — set them in the Render dashboard under
+# the service's Environment tab. The placeholders below are env vars whose
+# values you'll paste into the Render UI once.
+services:
+  - type: web
+    name: khashaa-chatbot
+    runtime: node
+    rootDir: chatbot-server
+    plan: free
+    region: singapore
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-haiku-4-5
+      - key: FACEBOOK_PAGE_ACCESS_TOKEN
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false
+      - key: FACEBOOK_VERIFY_TOKEN
+        sync: false
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false
+      - key: PUBLIC_SITE_URL
+        sync: false

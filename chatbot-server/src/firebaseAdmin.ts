@@ -6,14 +6,19 @@ import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 
 function loadCredentials(): Parameters<typeof initializeApp>[0] | undefined {
-  const b64 = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (b64) {
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (raw) {
+    // Accept either raw JSON or base64-encoded JSON. Raw is easier to paste; base64
+    // is convenient for single-line env stores like Cloud Run / Render.
+    const trimmed = raw.trim();
+    const candidate = trimmed.startsWith("{")
+      ? trimmed
+      : Buffer.from(trimmed, "base64").toString("utf8");
     try {
-      const json = Buffer.from(b64, "base64").toString("utf8");
-      const sa = JSON.parse(json);
+      const sa = JSON.parse(candidate);
       return { credential: cert(sa) };
     } catch (err) {
-      console.error("[firebaseAdmin] FIREBASE_SERVICE_ACCOUNT decode failed", err);
+      console.error("[firebaseAdmin] FIREBASE_SERVICE_ACCOUNT parse failed", err);
     }
   }
   // Falls back to GOOGLE_APPLICATION_CREDENTIALS or ADC
