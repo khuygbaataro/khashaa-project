@@ -118,11 +118,15 @@ async function runTool(
 ): Promise<ToolResult> {
   switch (name) {
     case "search_listings": {
+      // Claude works in tugrik; Firestore stores USD. Convert at the boundary.
+      const MNT_PER_USD = 3400;
+      const maxMnt = numberOrUndef(input.max_price_mnt);
+      const minMnt = numberOrUndef(input.min_price_mnt);
       const results = await searchListings(
         {
           type: input.type as "sale" | "rent" | undefined,
-          max_price_usd: numberOrUndef(input.max_price_usd),
-          min_price_usd: numberOrUndef(input.min_price_usd),
+          max_price_usd: maxMnt != null ? Math.ceil(maxMnt / MNT_PER_USD) : undefined,
+          min_price_usd: minMnt != null ? Math.floor(minMnt / MNT_PER_USD) : undefined,
           min_beds: numberOrUndef(input.min_beds),
           district: stringOrUndef(input.district),
           query: stringOrUndef(input.query),
@@ -174,16 +178,22 @@ async function runTool(
 }
 
 async function summarizeForClaude(l: Listing, includeAgent = false) {
+  // Convert USD → MNT before handing to Claude. Round to readable thousands so
+  // the model says "295 сая ₮" not "295,231,400 ₮".
+  const MNT_PER_USD = 3400;
+  const mnt = l.price * MNT_PER_USD;
   const base = {
     id: l.id,
     title: l.title,
     type: l.type,
-    price_usd: l.price,
+    price_mnt: Math.round(mnt / 1_000) * 1_000,
+    price_label: formatMntForClaude(mnt, l.type),
     location: l.location,
     district: l.district,
     beds: l.beds,
     baths: l.baths,
     sqm: l.sqm,
+    price_per_sqm_mnt: l.sqm > 0 ? Math.round(mnt / l.sqm / 1_000) * 1_000 : null,
     photo_count: l.photos.length,
     description: l.description,
   };
@@ -192,9 +202,28 @@ async function summarizeForClaude(l: Listing, includeAgent = false) {
   return {
     ...base,
     agent: agent
-      ? { id: agent.id, name: agent.name, has_phone: !!agent.phone }
+      ? {
+          id: agent.id,
+          name: agent.name,
+          phone: agent.phone ?? null,
+          bio: agent.bio ?? null,
+        }
       : null,
   };
+}
+
+function formatMntForClaude(mnt: number, type: "sale" | "rent"): string {
+  let label: string;
+  if (mnt >= 1_000_000_000) {
+    label = (mnt / 1_000_000_000).toFixed(1).replace(/\.0$/, "") + " тэрбум ₮";
+  } else if (mnt >= 1_000_000) {
+    label = Math.round(mnt / 1_000_000) + " сая ₮";
+  } else if (mnt >= 1_000) {
+    label = Math.round(mnt / 1_000) + " мянга ₮";
+  } else {
+    label = mnt.toLocaleString("en-US") + " ₮";
+  }
+  return type === "rent" ? `${label}/сар` : label;
 }
 
 function numberOrUndef(v: unknown): number | undefined {

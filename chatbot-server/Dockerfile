@@ -5,7 +5,8 @@ COPY package.json ./
 RUN npm install --omit=dev=false
 COPY tsconfig.json ./
 COPY src ./src
-RUN npx tsc -p tsconfig.json
+RUN npx tsc -p tsconfig.json \
+ && cp src/system-prompt.md dist/system-prompt.md
 
 FROM node:20-alpine
 WORKDIR /app
