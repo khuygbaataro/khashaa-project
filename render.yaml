@@ -7,6 +7,44 @@
 # the service's Environment tab. The placeholders below are env vars whose
 # values you'll paste into the Render UI once.
 services:
+  # Static frontend — agent dashboard + public listings site
+  - type: web
+    name: khashaa-frontend
+    runtime: static
+    plan: free
+    region: singapore
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    autoDeploy: true
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /assets/*
+        name: Cache-Control
+        value: "public, max-age=31536000, immutable"
+      - path: /index.html
+        name: Cache-Control
+        value: "no-cache"
+    envVars:
+      # These are baked into the Vite build at compile time. Firebase web-SDK
+      # config is public-by-design (it identifies the project, not your secrets),
+      # so embedding here is safe — security is enforced by Firestore rules.
+      - key: VITE_FIREBASE_API_KEY
+        value: AIzaSyCoh4t9SOmkNTrfMwGQGMo2PN96K7PNzb8
+      - key: VITE_FIREBASE_AUTH_DOMAIN
+        value: un-property.firebaseapp.com
+      - key: VITE_FIREBASE_PROJECT_ID
+        value: un-property
+      - key: VITE_FIREBASE_STORAGE_BUCKET
+        value: un-property.firebasestorage.app
+      - key: VITE_FIREBASE_MESSAGING_SENDER_ID
+        value: "180697524065"
+      - key: VITE_FIREBASE_APP_ID
+        value: "1:180697524065:web:47fbd44ad1d2a9bd0d8720"
+
+  # Chatbot Messenger webhook server
   - type: web
     name: khashaa-chatbot
     runtime: node
