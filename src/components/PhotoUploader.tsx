@@ -1,23 +1,23 @@
-// URL-based photo manager (no Firebase Storage needed — keeps the app on the free Spark plan).
-// Paste an image URL, see a preview, reorder by removing. First photo is the cover.
-import { useState } from "react";
-import { ImagePlus, X } from "lucide-react";
+// Dual-mode photo manager: upload from device (compressed → Firebase Storage) OR paste a URL.
+// Device upload requires the project's Firebase Storage to be enabled (Blaze plan on new projects);
+// if it fails, falls back gracefully and the user can still use URL paste.
+import { useRef, useState } from "react";
+import { Camera, ImagePlus, Loader, X } from "lucide-react";
+import { uploadPhoto } from "../lib/listings";
 import { palette } from "../lib/palette";
 
 interface Props {
   value: string[];
   onChange: (urls: string[]) => void;
-  /** Unused with URL-paste, kept for API parity with the file-upload version. */
-  listingId?: string;
+  /** Stable id for grouping uploaded files in storage. */
+  listingId: string;
   max?: number;
 }
 
 function looksLikeImageUrl(s: string): boolean {
   const v = s.trim();
   if (!v) return false;
-  // Local path served from /public — e.g. /house1.jpg
   if (v.startsWith("/")) return true;
-  // Remote URL
   try {
     const u = new URL(v);
     return u.protocol === "http:" || u.protocol === "https:";
@@ -26,15 +26,54 @@ function looksLikeImageUrl(s: string): boolean {
   }
 }
 
-export function PhotoUploader({ value, onChange, max = 8 }: Props) {
+export function PhotoUploader({ value, onChange, listingId, max = 8 }: Props) {
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const [busy, setBusy] = useState(false);
   const [input, setInput] = useState("");
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
 
-  function add() {
+  async function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    setBusy(true);
+    setError("");
+    setInfo("");
+    const remaining = max - value.length;
+    const toProcess = files.slice(0, remaining);
+    const uploaded: string[] = [];
+    let storageBlocked = false;
+    for (const f of toProcess) {
+      try {
+        const url = await uploadPhoto(f, listingId);
+        uploaded.push(url);
+      } catch (err) {
+        console.error("upload failed", err);
+        const code = (err as { code?: string })?.code ?? "";
+        if (code.includes("storage/unauthorized") || code.includes("storage/unknown")) {
+          storageBlocked = true;
+        }
+      }
+    }
+    if (uploaded.length) onChange([...value, ...uploaded]);
+    if (storageBlocked) {
+      setError(
+        "Device upload requires Firebase Storage (Blaze plan). For now, paste an image URL below — or enable Blaze in your Firebase console."
+      );
+    } else if (uploaded.length < toProcess.length) {
+      setError("Some photos failed to upload. Check your connection and try again.");
+    } else if (uploaded.length) {
+      setInfo(`${uploaded.length} photo${uploaded.length > 1 ? "s" : ""} uploaded.`);
+    }
+    setBusy(false);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  function addUrl() {
     const url = input.trim();
     if (!url) return;
     if (!looksLikeImageUrl(url)) {
-      setError("That doesn't look like a valid http(s) URL.");
+      setError("That doesn't look like a valid http(s) URL or local /path.");
       return;
     }
     if (value.includes(url)) {
@@ -48,6 +87,7 @@ export function PhotoUploader({ value, onChange, max = 8 }: Props) {
     onChange([...value, url]);
     setInput("");
     setError("");
+    setInfo("");
   }
 
   function remove(idx: number) {
@@ -63,6 +103,7 @@ export function PhotoUploader({ value, onChange, max = 8 }: Props) {
         Photos ({value.length}/{max})
       </label>
 
+      {/* Existing previews + a tile to trigger the device picker */}
       <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
         {value.map((p, i) => (
           <div
@@ -96,8 +137,40 @@ export function PhotoUploader({ value, onChange, max = 8 }: Props) {
             </button>
           </div>
         ))}
+        {value.length < max ? (
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={busy}
+            className="aspect-square rounded-md flex flex-col items-center justify-center gap-1 transition-colors"
+            style={{
+              border: `1px dashed ${palette.borderStrong}`,
+              backgroundColor: palette.cream,
+              color: palette.inkSoft,
+              cursor: busy ? "wait" : "pointer",
+            }}
+          >
+            {busy ? (
+              <Loader size={18} className="animate-spin" />
+            ) : (
+              <Camera size={18} />
+            )}
+            <span className="text-[10px] uppercase tracking-wider">
+              {busy ? "Uploading" : "Upload"}
+            </span>
+          </button>
+        ) : null}
       </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={handleFiles}
+        className="hidden"
+      />
 
+      {/* Or — paste a public image URL */}
       {value.length < max ? (
         <div className="flex gap-2 mt-1">
           <input
@@ -109,10 +182,10 @@ export function PhotoUploader({ value, onChange, max = 8 }: Props) {
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
-                add();
+                addUrl();
               }
             }}
-            placeholder="Paste image URL or /your-photo.jpg from public folder"
+            placeholder="…or paste an image URL (https://… or /your-photo.jpg)"
             className="flex-1 font-body text-[14px] px-3.5 py-2.5 rounded-md outline-none transition-colors"
             style={{
               backgroundColor: palette.paper,
@@ -128,24 +201,29 @@ export function PhotoUploader({ value, onChange, max = 8 }: Props) {
           />
           <button
             type="button"
-            onClick={add}
+            onClick={addUrl}
             className="font-body text-sm px-3 py-2.5 rounded-md flex items-center gap-1.5 transition-colors"
             style={{
-              backgroundColor: palette.terracotta,
-              color: "#FFF",
-              border: "none",
+              backgroundColor: palette.paper,
+              color: palette.ink,
+              border: `1px solid ${palette.borderStrong}`,
               cursor: "pointer",
             }}
           >
-            <ImagePlus size={14} /> Add
+            <ImagePlus size={14} /> Add URL
           </button>
         </div>
       ) : null}
 
       <span className="text-xs" style={{ color: palette.inkMuted }}>
-        Paste a public image URL. First photo becomes the cover. Direct upload
-        comes in Phase 1.5 (needs Firebase paid plan).
+        Upload from your device or paste a public URL. First photo becomes the cover.
+        Device upload needs Firebase Storage — works on Blaze plan.
       </span>
+      {info ? (
+        <span className="text-xs" style={{ color: palette.forest }}>
+          {info}
+        </span>
+      ) : null}
       {error ? (
         <span className="text-xs" style={{ color: "#C66" }}>
           {error}
