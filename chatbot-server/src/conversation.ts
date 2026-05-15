@@ -9,7 +9,9 @@ interface Thread {
   lastSeen: number;
 }
 
-const MAX_TURNS = 20; // user+assistant pairs to retain
+// ~15 messages of history → roughly 7 user+assistant pairs. Anything older is dropped
+// at the next setHistory() so the prompt stays cheap and focused on the recent turns.
+const MAX_TURNS = 8;
 const TTL_MS = 1000 * 60 * 60 * 6; // 6 hours of idle drops the thread
 const threads = new Map<string, Thread>();
 

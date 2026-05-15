@@ -1,6 +1,10 @@
-// Tool schemas exposed to Claude. Claude decides when to call each one based on the conversation.
-// Prices are in Mongolian tugrik (₮) at the tool boundary; conversion to USD happens
-// inside the tool implementation so the model never sees or thinks in dollars.
+// Tool schemas exposed to Claude. Single tool: show_photos. Claude calls it when the
+// customer asks about the building exterior or interior layout; the server handles the
+// actual Facebook image-attachment send based on which category Claude picked.
+//
+// System prompt loading: combines `prompts/zaisan-system-prompt.md` (rules + flow) with
+// `knowledge/zaisan-high-land.md` (facts) at module load. The {{KNOWLEDGE}} placeholder
+// is substituted once. Both files are copied next to this module during `npm run build`.
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,104 +12,32 @@ import type Anthropic from "@anthropic-ai/sdk";
 
 export const tools: Anthropic.Tool[] = [
   {
-    name: "search_listings",
+    name: "show_photos",
     description:
-      "Манай Firestore мэдээллийн сангаас идэвхтэй байрнуудыг хайна. Хамгийн их 5 үр дүн буцаана. Худалдан авах эсвэл түрээслэх асуултад ВСЕГДА энэ функцыг ашигла — өөрөө байр зохиож хариулж болохгүй.",
+      "Zaisan High Land хотхоны бодит зургуудыг харилцагчид илгээнэ. Хэрэглэгч барилгын хийцлэл/гадна тал/архитектур/орчны талаар асуувал category='exterior'. Өрөөний зохион байгуулалт/A type/B type/дотор тал/гал тогоо/зочны өрөө асуувал category='interior'. Зөвхөн холбогдох сэдвээр асуусан үед дуудна — өөрөөсөө шахаж явуулахгүй. Нэг сэдэвт нэг л удаа.",
     input_schema: {
       type: "object",
       properties: {
-        type: {
+        category: {
           type: "string",
-          enum: ["sale", "rent"],
-          description: "sale = худалдаж авах. rent = түрээслэх.",
-        },
-        max_price_mnt: {
-          type: "number",
-          description:
-            "Заавал биш. Үнийн дээд хязгаар, ТӨГРӨГӨӨР (бүтэн тоо). Жишээ: 200000000 (=200 сая ₮). Түрээсийн үед сард.",
-        },
-        min_price_mnt: {
-          type: "number",
-          description:
-            "Заавал биш. Үнийн доод хязгаар, ТӨГРӨГӨӨР (бүтэн тоо).",
-        },
-        min_beds: {
-          type: "number",
-          description: "Заавал биш. Хамгийн багадаа хэдэн өрөө.",
-        },
-        district: {
-          type: "string",
-          description:
-            "Заавал биш. Дүүргийн нэр монголоор. Жишээ: 'Сүхбаатар', 'Хан-Уул', 'Баянзүрх', 'Баянгол', 'Сонгинохайрхан', 'Чингэлтэй', 'Налайх'.",
-        },
-        query: {
-          type: "string",
-          description:
-            "Заавал биш. Чөлөөт хайлт — гарчиг, байршил, тайлбараар хайна. Хотхоны нэр, хорооллын онцлог нэр энд оруулж болно (жнь 'Зайсан', '100 айл', '13-р хороолол').",
+          enum: ["exterior", "interior"],
+          description: "exterior = гадна барилгын зургууд. interior = дотор өрөөний зургууд.",
         },
       },
-      required: [],
-    },
-  },
-  {
-    name: "get_listing_details",
-    description:
-      "Тодорхой нэг байрны бүрэн мэдээлэл (тайлбар, зураг, агентын мэдээлэл) авах. Харилцагч аль нэг байрны нарийн мэдээллийг асуухад ашигла.",
-    input_schema: {
-      type: "object",
-      properties: {
-        id: { type: "string", description: "Байрны ID." },
-      },
-      required: ["id"],
-    },
-  },
-  {
-    name: "create_seller_lead",
-    description:
-      "Байраа зарах эсвэл түрээслүүлэх хүсэлтэй харилцагчийн lead-г бүртгэнэ. Нэр, утас, төрөл, байршил гээд хамгийн багадаа эдгээрийг цуглуулсны дараа л дуудна.",
-    input_schema: {
-      type: "object",
-      properties: {
-        name: { type: "string", description: "Харилцагчийн нэр." },
-        phone: { type: "string", description: "Харилцагчийн утасны дугаар." },
-        property_type: {
-          type: "string",
-          enum: ["sale", "rent"],
-          description: "Зарах уу, түрээслүүлэх үү?",
-        },
-        location: { type: "string", description: "Байрны байршил, хороолол." },
-        beds: { type: "number", description: "Өрөөний тоо, заавал биш." },
-        description: {
-          type: "string",
-          description: "Нэмэлт мэдээлэл (талбай, давхар, ашиглалтад орсон жил, бодож буй үнэ зэрэг).",
-        },
-      },
-      required: ["name", "phone", "property_type", "location"],
-    },
-  },
-  {
-    name: "request_human_agent",
-    description:
-      "Харилцагч агенттай шууд ярихыг хүсэх, эсвэл AI-ийн чадахаас давсан асуулт асуувал — энэ функцийг дуудаж бүртгэнэ.",
-    input_schema: {
-      type: "object",
-      properties: {
-        name: { type: "string", description: "Заавал биш. Харилцагчийн нэр." },
-        phone: { type: "string", description: "Заавал биш. Утасны дугаар." },
-        about: {
-          type: "string",
-          description: "Юу тодруулмаар байгаа товч тайлбар.",
-        },
-      },
-      required: ["about"],
+      required: ["category"],
     },
   },
 ];
 
-// Load the system prompt from the .md file next to this module.
-// The build step copies system-prompt.md → dist/system-prompt.md.
 const here = dirname(fileURLToPath(import.meta.url));
-export const SYSTEM_PROMPT: string = readFileSync(
-  join(here, "system-prompt.md"),
-  "utf-8"
-);
+
+function loadCombinedSystemPrompt(): string {
+  const promptPath = join(here, "prompts", "zaisan-system-prompt.md");
+  const knowledgePath = join(here, "knowledge", "zaisan-high-land.md");
+  const template = readFileSync(promptPath, "utf-8");
+  const knowledge = readFileSync(knowledgePath, "utf-8");
+  return template.replace("{{KNOWLEDGE}}", knowledge);
+}
+
+// Computed once at module load — no disk reads on the hot path.
+export const SYSTEM_PROMPT: string = loadCombinedSystemPrompt();
