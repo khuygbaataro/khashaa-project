@@ -7,7 +7,7 @@ import { tools, SYSTEM_PROMPT } from "./tools.js";
 import type { Msg } from "./conversation.js";
 
 const client = new Anthropic();
-const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5-20251001";
+const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-4-7";
 const MAX_TOOL_LOOPS = 3;
 
 export type PhotoCategory = "exterior" | "interior";

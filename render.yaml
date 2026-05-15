@@ -61,7 +61,7 @@ services:
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: ANTHROPIC_MODEL
-        value: claude-haiku-4-5
+        value: claude-opus-4-7
       - key: FACEBOOK_PAGE_ACCESS_TOKEN
         sync: false
       - key: FACEBOOK_APP_SECRET
