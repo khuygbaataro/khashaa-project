@@ -65,6 +65,23 @@ export async function sendTypingOn(psid: string): Promise<void> {
   }).catch(() => undefined);
 }
 
+/**
+ * Send a single image attachment. URL must be a public https:// resource Facebook can fetch.
+ * is_reusable=true lets FB cache the attachment id so repeat sends are cheap.
+ */
+export async function sendImageAttachment(psid: string, imageUrl: string): Promise<void> {
+  await fbCall("/me/messages", {
+    recipient: { id: psid },
+    messaging_type: "RESPONSE",
+    message: {
+      attachment: {
+        type: "image",
+        payload: { url: imageUrl, is_reusable: true },
+      },
+    },
+  });
+}
+
 export async function sendText(psid: string, text: string): Promise<void> {
   // Facebook hard caps text at 2000 chars; chunk to be safe.
   const chunks = chunkText(text, 1900);

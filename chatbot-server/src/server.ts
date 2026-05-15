@@ -1,21 +1,30 @@
-// Express server. GET /webhook = FB verify handshake. POST /webhook = receive messages.
-// Handlers are fired in the background (no awaiting in the response path) so FB gets a 200
-// fast — they retry aggressively if the response is slow.
+// Express server for the Zaisan High Land Messenger bot.
+//   GET  /webhook  → Facebook verify handshake
+//   POST /webhook  → incoming messaging events
+//
+// Per-event flow:
+//   1. ACK 200 to FB immediately, then process in background (FB retries aggressive 200s).
+//   2. If the PSID has no /conversations doc yet OR the text is the "11" trigger →
+//      send the canned WELCOME_MESSAGE, log it, and skip Claude.
+//   3. Otherwise → run Claude (with show_photos tool), send its text reply, then
+//      send any exterior/interior photo attachments Claude requested.
+//   4. Persist the turn to Firestore /conversations/{psid} (best-effort, fire-and-forget).
 import "dotenv/config";
 import express, { type Request, type Response } from "express";
-import { runTurn } from "./claude.js";
+import { runTurn, type PhotoCategory } from "./claude.js";
 import { getHistory, setHistory } from "./conversation.js";
+import { appendTurn, hasConversation } from "./conversationLog.js";
 import {
-  sendPropertyCarousel,
+  sendImageAttachment,
   sendText,
   sendTypingOn,
   verifySignature,
   verifyWebhook,
 } from "./facebook.js";
+import { WELCOME_MESSAGE, isWelcomeTriggerText } from "./welcome.js";
 
 const app = express();
 
-// Capture raw body so we can verify the FB X-Hub-Signature-256 against it.
 app.use(
   "/webhook",
   express.raw({ type: "application/json", limit: "1mb" })
@@ -23,17 +32,30 @@ app.use(
 app.use(express.json());
 
 const PORT = Number(process.env.PORT ?? 8080);
-const PUBLIC_SITE_URL = process.env.PUBLIC_SITE_URL ?? "https://claude.mn";
+const PUBLIC_SITE_URL = (process.env.PUBLIC_SITE_URL ?? "https://claude.mn").replace(/\/$/, "");
+
+// Photo URLs assembled at startup from PUBLIC_SITE_URL — all ASCII filenames so FB
+// can fetch them without URL-encoding surprises.
+const PHOTOS: Record<PhotoCategory, string[]> = {
+  exterior: [
+    `${PUBLIC_SITE_URL}/gadna1.jpg`,
+    `${PUBLIC_SITE_URL}/gadna2.jpg`,
+    `${PUBLIC_SITE_URL}/gadna4.jpg`,
+  ],
+  interior: [
+    `${PUBLIC_SITE_URL}/dotor1.jpg`,
+    `${PUBLIC_SITE_URL}/dotor2.jpg`,
+  ],
+};
 
 app.get("/", (_req, res) => {
-  res.send("Khashaa chatbot is running.");
+  res.send("Zaisan High Land chatbot is running.");
 });
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-// Webhook verification (GET) — Facebook hits this once when you set up the subscription.
 app.get("/webhook", (req: Request, res: Response) => {
   const result = verifyWebhook(req.query as Record<string, string | undefined>);
   if (result.ok) {
@@ -44,7 +66,6 @@ app.get("/webhook", (req: Request, res: Response) => {
   }
 });
 
-// Receive messaging events.
 app.post("/webhook", (req: Request, res: Response) => {
   const raw = req.body as Buffer;
   if (!verifySignature(raw, req.header("x-hub-signature-256") ?? undefined)) {
@@ -60,7 +81,6 @@ app.post("/webhook", (req: Request, res: Response) => {
     return;
   }
 
-  // Acknowledge fast — process in background.
   res.sendStatus(200);
 
   if (body.object !== "page") return;
@@ -93,8 +113,6 @@ interface MessagingEvent {
 async function handleEvent(event: MessagingEvent): Promise<void> {
   const psid = event.sender?.id;
   if (!psid) return;
-
-  // Echo events are messages we ourselves sent — ignore.
   if (event.message?.is_echo) return;
 
   const text =
@@ -105,41 +123,63 @@ async function handleEvent(event: MessagingEvent): Promise<void> {
 
   console.log(`[msg in] ${psid}: ${text}`);
 
-  // Show typing indicator while we think.
   await sendTypingOn(psid).catch(() => undefined);
+
+  // First-contact detection persisted in Firestore — survives server restarts so a returning
+  // user does NOT get re-greeted. The "11" payload always triggers the welcome regardless.
+  const firstContact = !(await hasConversation(psid));
+  if (firstContact || isWelcomeTriggerText(text)) {
+    await sendText(psid, WELCOME_MESSAGE).catch((err) =>
+      console.error("[fb] sendText welcome failed", err)
+    );
+    // Seed the in-memory history with the welcome so Claude sees we already greeted —
+    // prevents a duplicate "Сайн байна уу!" on the next AI turn.
+    const seeded = [
+      ...getHistory(psid),
+      { role: "user" as const, content: text },
+      { role: "assistant" as const, content: WELCOME_MESSAGE },
+    ];
+    setHistory(psid, seeded);
+    void appendTurn(psid, text, WELCOME_MESSAGE);
+    return;
+  }
 
   let result;
   try {
     const history = getHistory(psid);
-    result = await runTurn(history, text, { fbPsid: psid });
+    result = await runTurn(history, text);
     setHistory(psid, result.history);
   } catch (err) {
     console.error("[claude] runTurn failed", err);
     await sendText(
       psid,
-      "Sorry, I'm having trouble right now. Please try again in a moment."
+      "Уучлаарай, түр алдаа гарлаа. Дахин оролдоно уу, эсвэл борлуулалтын алба 8861-2088 руу холбогдоно уу."
     ).catch(() => undefined);
     return;
   }
 
-  // Send the text reply first…
   if (result.reply) {
     await sendText(psid, result.reply).catch((err) => {
       console.error("[fb] sendText failed", err);
     });
   }
 
-  // …then the property carousel for any matched listings (with public images).
-  const carouselable = result.matchedListings.filter((l) =>
-    l.photos.some((u) => /^https?:\/\//i.test(u))
-  );
-  if (carouselable.length) {
-    await sendPropertyCarousel(psid, carouselable, PUBLIC_SITE_URL).catch(
-      (err) => console.error("[fb] carousel failed", err)
-    );
+  // Photos come after the text so the user reads context first, then sees the visuals.
+  // De-dup categories in case the model emitted the same one twice in one turn.
+  const seen = new Set<PhotoCategory>();
+  for (const cat of result.photoCategories) {
+    if (seen.has(cat)) continue;
+    seen.add(cat);
+    for (const url of PHOTOS[cat]) {
+      await sendImageAttachment(psid, url).catch((err) =>
+        console.error(`[fb] sendImage failed (${cat})`, err)
+      );
+    }
   }
+
+  void appendTurn(psid, text, result.reply);
 }
 
 app.listen(PORT, () => {
-  console.log(`[khashaa-chatbot] listening on :${PORT}`);
+  console.log(`[zaisan-chatbot] listening on :${PORT}`);
 });
