@@ -7,12 +7,12 @@
 # the service's Environment tab. The placeholders below are env vars whose
 # values you'll paste into the Render UI once.
 services:
-  # Static frontend — agent dashboard + public listings site
+  # Static frontend — agent dashboard + public listings site.
+  # Static sites are served from Render's global edge — no `region` field allowed.
   - type: web
     name: khashaa-frontend
     runtime: static
     plan: free
-    region: singapore
     buildCommand: npm install && npm run build
     staticPublishPath: dist
     autoDeploy: true
