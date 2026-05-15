@@ -44,9 +44,11 @@ services:
       - key: VITE_FIREBASE_APP_ID
         value: "1:180697524065:web:47fbd44ad1d2a9bd0d8720"
 
-  # Chatbot Messenger webhook server
+  # Chatbot Messenger webhook server.
+  # Service name matches the pre-existing manually-created Render service so the
+  # blueprint syncs with it instead of trying to create a duplicate.
   - type: web
-    name: khashaa-chatbot
+    name: khashaa-project
     runtime: node
     rootDir: chatbot-server
     plan: free
